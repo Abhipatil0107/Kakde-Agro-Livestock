@@ -600,3 +600,135 @@
   color: #68776b;
   line-height: 1.8;
 }
+/* Milk Hisab Delete Buttons */
+
+.milk-entry-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.delete-btn {
+  border: 1px solid #dc6262;
+  background: transparent;
+  color: #dc6262;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.delete-btn:hover {
+  background: #dc6262;
+  color: #fff;
+}
+
+.milk-payment-history {
+  margin-top: 20px;
+}
+
+.milk-payment-history h4 {
+  margin-bottom: 12px;
+}
+
+/* ===== KAKDE AGRO PREMIUM ANIMATIONS ===== */
+
+html {
+  scroll-behavior: smooth;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(25px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes softFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes imageZoom {
+  from {
+    transform: scale(1.08);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Dashboard cards */
+.dash-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.dash-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.10);
+}
+
+/* Buttons */
+button, .btn {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+button:hover, .btn:hover {
+  transform: translateY(-2px);
+}
+
+/* Images */
+img {
+  transition: transform 0.5s ease, filter 0.5s ease;
+}
+
+img:hover {
+  filter: brightness(1.04);
+}
+
+/* Sections */
+.section-pad {
+  scroll-margin-top: 90px;
+}
+
+/* Hero image */
+.hero-image {
+  animation: imageZoom 1.5s ease-out both;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* Scroll Reveal Animation */
+
+.reveal-element {
+  opacity: 0;
+  transform: translateY(35px);
+  transition:
+    opacity 0.8s ease,
+    transform 0.8s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.reveal-element.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}

@@ -234,14 +234,40 @@ export default function App() {
   const [postTitle, setPostTitle] = useState("");
   const [postBody, setPostBody] = useState("");
   const [notice, setNotice] = useState("");
+    // Milk Daily Hisab states
+  const [milkCustomers, setMilkCustomers] = useState([]);
+  const [milkEntries, setMilkEntries] = useState([]);
+  const [milkPayments, setMilkPayments] = useState([]);
 
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
+  const [customerRate, setCustomerRate] = useState("");
+
+  const [milkCustomerId, setMilkCustomerId] = useState("");
+  const [milkQuantity, setMilkQuantity] = useState("");
+  const [milkDate, setMilkDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [milkRate, setMilkRate] = useState("");
+    const [paymentCustomerId, setPaymentCustomerId] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [paymentMode, setPaymentMode] = useState("Cash");
+  const [paymentMonth, setPaymentMonth] = useState(
+    new Date().toISOString().slice(0, 7) + "-01"
+  );
+  const [paymentNotes, setPaymentNotes] = useState("");
   const [selectedYear, setSelectedYear] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("all");
 
   const t = copy[lang];
   const navIds = ["home", "about", "agriculture", "dairy", "gallery", "contact"];
 
-  // Authentication session
+  
+  // Supabase Authentication
   useEffect(() => {
     if (!supabase) return;
 
@@ -257,6 +283,43 @@ export default function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Load Milk Daily Hisab data
+  useEffect(() => {
+    if (!session || !isSupabaseConfigured) {
+      setMilkCustomers([]);
+      setMilkEntries([]);
+      setMilkPayments([]);
+      return;
+    }
+
+    async function loadMilkData() {
+      const [
+        { data: customers, error: customerError },
+        { data: entries, error: entryError },
+        { data: payments, error: paymentError }
+      ] = await Promise.all([
+        supabase.from("milk_customers").select("*").eq("active", true).order("customer_name"),
+        supabase.from("milk_entries").select("*").order("entry_date", { ascending: false }),
+        supabase.from("milk_payments").select("*").order("payment_date", { ascending: false })
+      ]);
+
+      if (customerError || entryError || paymentError) {
+        setNotice(
+          customerError?.message ||
+          entryError?.message ||
+          paymentError?.message
+        );
+        return;
+      }
+
+      setMilkCustomers(customers || []);
+      setMilkEntries(entries || []);
+      setMilkPayments(payments || []);
+    }
+
+    loadMilkData();
+  }, [session]);
 
   // Public gallery and updates
   useEffect(() => {
@@ -619,33 +682,196 @@ async function publishUpdate(e) {
 }
 
   // Add ledger entry
-  async function addLedger(e) {
-    e.preventDefault();
+async function addLedger(e) {
+  e.preventDefault();
+
+  const { error } = await supabase.from("farm_ledger").insert({
+    entry_type: recordType,
+    amount: Number(recordAmount),
+    crop: recordCrop,
+    category: recordCategory,
+    entry_date: recordDate,
+    notes: recordNote
+  });
+
+  if (error) {
+    setNotice(error.message);
+  } else {
+    const { data } = await supabase
+      .from("farm_ledger")
+      .select("*")
+      .order("entry_date", { ascending: false });
+
+    setRecords(data || []);
+    setRecordAmount("");
+    setRecordNote("");
+    setNotice("Ledger entry saved securely.");
+  }
+}
+
+// Add Milk Customer
+async function addMilkCustomer(e) {
+  e.preventDefault();
+
+  if (!customerName.trim() || Number(customerRate) <= 0) {
+    setNotice("Please enter customer name and valid milk rate.");
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("milk_customers")
+    .insert({
+      customer_name: customerName.trim(),
+      phone: customerPhone,
+      address: customerAddress,
+      rate_per_liter: Number(customerRate)
+    })
+    .select()
+    .single();
+
+  if (error) {
+    setNotice(error.message);
+    return;
+  }
+
+  setMilkCustomers(prev =>
+    [...prev, data].sort((a, b) =>
+      a.customer_name.localeCompare(b.customer_name)
+    )
+  );
+
+  setCustomerName("");
+  setCustomerPhone("");
+  setCustomerAddress("");
+  setCustomerRate("");
+  setNotice("Milk customer added successfully.");
+}
+
+// Save Daily Milk Entry
+async function addMilkEntry(e) {
+  e.preventDefault();
+
+  if (!milkCustomerId || Number(milkQuantity) <= 0) {
+    setNotice("Please select customer and enter valid milk quantity.");
+    return;
+  }
+
+  const customer = milkCustomers.find(c => c.id === milkCustomerId);
+
+  if (!customer) {
+    setNotice("Customer not found.");
+    return;
+  }
+
+  const rate = Number(milkRate || customer.rate_per_liter);
+
+  const { data, error } = await supabase
+    .from("milk_entries")
+    .insert({
+      customer_id: milkCustomerId,
+      entry_date: milkDate,
+      quantity_liters: Number(milkQuantity),
+      rate_per_liter: rate
+    })
+    .select()
+    .single();
+
+  if (error) {
+    setNotice(error.message);
+    return;
+  }
+
+  setMilkEntries(prev => [data, ...prev]);
+  setMilkQuantity("");
+  setMilkRate("");
+  setNotice("Daily milk entry saved successfully.");
+}
+
+// Save Customer Milk Payment
+async function addMilkPayment(e) {
+  e.preventDefault();
+
+  if (!paymentCustomerId || Number(paymentAmount) <= 0) {
+    setNotice("Please select customer and enter valid payment amount.");
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("milk_payments")
+    .insert({
+      customer_id: paymentCustomerId,
+      bill_month: paymentMonth,
+      payment_date: paymentDate,
+      amount: Number(paymentAmount),
+      payment_mode: paymentMode,
+      notes: paymentNotes
+    })
+    .select()
+    .single();
+
+  if (error) {
+    setNotice(error.message);
+    return;
+  }
+
+  setMilkPayments(prev => [data, ...prev]);
+  setPaymentAmount("");
+  setPaymentNotes("");
+  setNotice("Customer payment saved successfully.");
+}
+
+  // Remove Milk Customer (preserve old history)
+  async function deleteMilkCustomer(id) {
+    if (!window.confirm("Remove this customer? Old milk history will be preserved.")) return;
 
     const { error } = await supabase
-      .from("farm_ledger")
-      .insert({
-        entry_type: recordType,
-        amount: Number(recordAmount),
-        crop: recordCrop,
-        category: recordCategory,
-        entry_date: recordDate,
-        notes: recordNote
-      });
+      .from("milk_customers")
+      .update({ active: false })
+      .eq("id", id);
 
     if (error) {
       setNotice(error.message);
-    } else {
-      const { data } = await supabase
-        .from("farm_ledger")
-        .select("*")
-        .order("entry_date", { ascending: false });
-
-      setRecords(data || []);
-      setRecordAmount("");
-      setRecordNote("");
-      setNotice("Ledger entry saved securely.");
+      return;
     }
+
+    setMilkCustomers(prev => prev.filter(c => c.id !== id));
+    setNotice("Customer removed successfully. Old history is preserved.");
+  }
+
+  // Delete Daily Milk Entry
+  async function deleteMilkEntry(id) {
+    if (!window.confirm("Permanently delete this milk entry?")) return;
+
+    const { error } = await supabase
+      .from("milk_entries")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      setNotice(error.message);
+      return;
+    }
+
+    setMilkEntries(prev => prev.filter(entry => entry.id !== id));
+    setNotice("Milk entry deleted successfully.");
+  }
+
+  // Delete Customer Payment
+  async function deleteMilkPayment(id) {
+    if (!window.confirm("Permanently delete this payment?")) return;
+
+    const { error } = await supabase
+      .from("milk_payments")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      setNotice(error.message);
+      return;
+    }
+
+    setMilkPayments(prev => prev.filter(payment => payment.id !== id));
+    setNotice("Payment deleted successfully.");
   }
 
   // Export accounting CSV
@@ -1357,6 +1583,419 @@ async function publishUpdate(e) {
                   </section>
                   
 {/* DAIRY GALLERY MANAGER */}
+
+                  {/* MILK CUSTOMER REGISTER */}
+                  <section className="dash-card">
+                    <h3>
+                      <Milk />
+                      Milk Customer Register
+                    </h3>
+
+                    <form onSubmit={addMilkCustomer}>
+                      <label>
+                        Customer Name
+                        <input
+                          value={customerName}
+                          onChange={e => setCustomerName(e.target.value)}
+                          placeholder="Enter customer name"
+                          required
+                        />
+                      </label>
+
+                      <label>
+                        Mobile Number
+                        <input
+                          type="tel"
+                          value={customerPhone}
+                          onChange={e => setCustomerPhone(e.target.value)}
+                          placeholder="Customer phone number"
+                        />
+                      </label>
+
+                      <label>
+                        Address
+                        <input
+                          value={customerAddress}
+                          onChange={e => setCustomerAddress(e.target.value)}
+                          placeholder="Customer address"
+                        />
+                      </label>
+
+                      <label>
+                        Milk Rate (₹ per litre)
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={customerRate}
+                          onChange={e => setCustomerRate(e.target.value)}
+                          placeholder="Example: 60"
+                          required
+                        />
+                      </label>
+
+                      <button className="btn btn-green full" type="submit">
+                        <Plus size={16} />
+                        Add Customer
+                      </button>
+                    </form>
+
+                    <div className="ledger-list">
+                      <b>Registered Customers ({milkCustomers.length})</b>
+
+                      
+{milkCustomers.map(customer => (
+  <div key={customer.id}>
+    <span>
+      {customer.customer_name} · ₹
+      {Number(customer.rate_per_liter).toFixed(2)}/L
+    </span>
+
+    <div className="milk-entry-actions">
+      <b>{customer.phone || "No phone"}</b>
+      <button
+        type="button"
+        className="delete-btn"
+        onClick={() => deleteMilkCustomer(customer.id)}
+      >
+        Delete
+      </button>
+    </div>
+  </div>
+))}
+
+                      {milkCustomers.length === 0 && (
+                        <p>No customers added yet.</p>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* DAILY MILK ENTRY */}
+                  <section className="dash-card">
+                    <h3>
+                      <Milk />
+                      Daily Milk Entry
+                    </h3>
+
+                    <form onSubmit={addMilkEntry}>
+                      <label>
+                        Select Customer
+                        <select
+                          value={milkCustomerId}
+                          onChange={e => {
+                            const id = e.target.value;
+                            setMilkCustomerId(id);
+
+                            const customer = milkCustomers.find(
+                              c => c.id === id
+                            );
+
+                            setMilkRate(
+                              customer
+                                ? String(customer.rate_per_liter)
+                                : ""
+                            );
+                          }}
+                          required
+                        >
+                          <option value="">Choose customer</option>
+                          {milkCustomers.map(customer => (
+                            <option key={customer.id} value={customer.id}>
+                              {customer.customer_name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label>
+                        Date
+                        <input
+                          type="date"
+                          value={milkDate}
+                          onChange={e => setMilkDate(e.target.value)}
+                          required
+                        />
+                      </label>
+
+                      <div className="form-two">
+                        <label>
+                          Quantity (Litres)
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={milkQuantity}
+                            onChange={e => setMilkQuantity(e.target.value)}
+                            placeholder="Example: 2"
+                            required
+                          />
+                        </label>
+
+                        <label>
+                          Rate (₹ / Litre)
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={milkRate}
+                            onChange={e => setMilkRate(e.target.value)}
+                            required
+                          />
+                        </label>
+                      </div>
+
+                      <div className="notice">
+                        Total Amount: ₹
+                        {(
+                          Number(milkQuantity || 0) *
+                          Number(milkRate || 0)
+                        ).toFixed(2)}
+                      </div>
+
+                      <button
+                        className="btn btn-green full"
+                        type="submit"
+                        disabled={milkCustomers.length === 0}
+                      >
+                        <Plus size={16} />
+                        Save Daily Milk Entry
+                      </button>
+                    </form>
+                  </section>
+
+                  {/* RECENT MILK ENTRIES */}
+
+                  {/* CUSTOMER PAYMENT TRACKING */}
+                  <section className="dash-card">
+                    <h3>
+                      <Wallet />
+                      Customer Payment Tracking
+                    </h3>
+
+                    <form onSubmit={addMilkPayment}>
+                      <label>
+                        Select Customer
+                        <select
+                          value={paymentCustomerId}
+                          onChange={e => setPaymentCustomerId(e.target.value)}
+                          required
+                        >
+                          <option value="">Choose customer</option>
+                          {milkCustomers.map(customer => (
+                            <option key={customer.id} value={customer.id}>
+                              {customer.customer_name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label>
+                        Bill Month
+                        <input
+                          type="month"
+                          value={paymentMonth.slice(0, 7)}
+                          onChange={e =>
+                            setPaymentMonth(`${e.target.value}-01`)
+                          }
+                          required
+                        />
+                      </label>
+
+                      <div className="form-two">
+                        <label>
+                          Payment Amount (₹)
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={paymentAmount}
+                            onChange={e => setPaymentAmount(e.target.value)}
+                            required
+                          />
+                        </label>
+
+                        <label>
+                          Payment Date
+                          <input
+                            type="date"
+                            value={paymentDate}
+                            onChange={e => setPaymentDate(e.target.value)}
+                            required
+                          />
+                        </label>
+                      </div>
+
+                      <label>
+                        Payment Mode
+                        <select
+                          value={paymentMode}
+                          onChange={e => setPaymentMode(e.target.value)}
+                        >
+                          <option>Cash</option>
+                          <option>UPI</option>
+                          <option>Bank Transfer</option>
+                        </select>
+                      </label>
+
+                      <label>
+                        Notes
+                        <input
+                          value={paymentNotes}
+                          onChange={e => setPaymentNotes(e.target.value)}
+                          placeholder="Optional payment details"
+                        />
+                      </label>
+
+                      <button
+                        className="btn btn-green full"
+                        type="submit"
+                        disabled={milkCustomers.length === 0}
+                      >
+                        <Plus size={16} />
+                        Save Payment
+                      </button>
+                    </form>
+                    <div className="milk-payment-history">
+  <h4>Recent Customer Payments</h4>
+
+  {milkPayments.length === 0 ? (
+    <p>No payments recorded yet.</p>
+  ) : (
+    milkPayments.slice(0, 10).map(payment => {
+      const customer = milkCustomers.find(
+        c => c.id === payment.customer_id
+      );
+
+      return (
+        <div key={payment.id}>
+          <span>
+            {customer?.customer_name || "Customer"} ·{" "}
+            {payment.payment_date} · {payment.payment_mode}
+          </span>
+
+          <div className="milk-entry-actions">
+            <b className="positive">
+              ₹{Number(payment.amount).toFixed(2)}
+            </b>
+
+            <button
+              type="button"
+              className="delete-btn"
+              onClick={() => deleteMilkPayment(payment.id)}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      );
+    })
+  )}
+</div>
+                  </section>
+
+                  {/* CUSTOMER MONTHLY BALANCE */}
+                  <section className="dash-card">
+                    <h3>
+                      <IndianRupee />
+                      Customer Monthly Balance
+                    </h3>
+
+                    {milkCustomers.map(customer => {
+                      const month = paymentMonth.slice(0, 7);
+
+                      const totalMilk = milkEntries
+                        .filter(entry =>
+                          entry.customer_id === customer.id &&
+                          entry.entry_date?.startsWith(month)
+                        )
+                        .reduce(
+                          (sum, entry) => sum + Number(entry.amount || 0),
+                          0
+                        );
+
+                      const totalPaid = milkPayments
+                        .filter(payment =>
+                          payment.customer_id === customer.id &&
+                          payment.bill_month?.slice(0, 7) === month
+                        )
+                        .reduce(
+                          (sum, payment) => sum + Number(payment.amount || 0),
+                          0
+                        );
+
+                      const balance = totalMilk - totalPaid;
+
+                      return (
+                        <div className="ledger-list" key={customer.id}>
+                          <div>
+                            <span>
+                              <b>{customer.customer_name}</b>
+                              <br />
+                              Milk Bill: ₹{totalMilk.toFixed(2)}
+                            </span>
+                            <b className="positive">
+                              Paid: ₹{totalPaid.toFixed(2)}
+                            </b>
+                          </div>
+
+                          <div>
+                            <span>Outstanding Balance</span>
+                            <b className={balance > 0 ? "negative" : "positive"}>
+                              ₹{balance.toFixed(2)}
+                            </b>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {milkCustomers.length === 0 && (
+                      <p>Add customers to view monthly balances.</p>
+                    )}
+                  </section>
+
+                  <section className="dash-card">
+                    <h3>
+                      <CalendarDays />
+                      Recent Milk Entries
+                    </h3>
+
+                    <div className="ledger-list">
+                      {milkEntries.slice(0, 10).map(entry => {
+  const customer = milkCustomers.find(
+    c => c.id === entry.customer_id
+  );
+
+  return (
+    <div key={entry.id}>
+      <span>
+        {customer?.customer_name || "Customer"} ·{" "}
+        {entry.entry_date} ·{" "}
+        {entry.quantity_liters} L
+      </span>
+
+      <div className="milk-entry-actions">
+        <b className="positive">
+          ₹{Number(entry.amount).toFixed(2)}
+        </b>
+
+        <button
+          type="button"
+          className="delete-btn"
+          onClick={() => deleteMilkEntry(entry.id)}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+})}
+
+                      {milkEntries.length === 0 && (
+                        <p>No milk entries recorded yet.</p>
+                      )}
+                    </div>
+                  </section>
+
 <section className="dash-card">
   <h3>
     <Images />
